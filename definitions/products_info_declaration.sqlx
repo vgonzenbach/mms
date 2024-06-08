@@ -1,0 +1,6 @@
+config {
+    type: "declaration",
+    database: "wv63-virgiliojose",
+    schema: "mms",
+    name: "products_info",
+}

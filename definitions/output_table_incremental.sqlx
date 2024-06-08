@@ -1,0 +1,66 @@
+config {
+    type: "incremental",
+    protected: true,
+    dependencies : ["sales_daily", "curr_exchange_v2", "products_info", "outlets_info"]
+
+}
+
+INSERT mms.output_table(
+    country,
+    sales_date,
+    outlet_id,
+    outlet_name,
+    region,
+    sales_value ,
+    sales_value_eur
+)
+WITH sales_daily_today AS ( -- filter in date of interest on `sales_daily` table
+  SELECT 
+    country, 
+    sales_date,
+    outlet_id,
+    sales_value,
+    product_id, -- will be dropped from final output
+  FROM ${ref("sales_daily")}
+  WHERE sales_date = ${dataform.projectConfig.vars.date_of_interest}
+), 
+products_info_excluding AS ( -- filter out own_brand products in `product_info` table
+  SELECT 
+    product_id,
+    is_own_brand
+  FROM ${ref("products_info")}
+  WHERE is_own_brand = FALSE
+),
+sales_daily_today_excluding AS ( -- inner join filtered tables `sales_daily_today` and `product_info_excluding`
+  SELECT
+      country, 
+      sales_date, 
+      outlet_id,
+      sales_value -- dropped `product_id` from output
+  FROM sales_daily_today s_d
+  INNER JOIN products_info_excluding p_i 
+      ON s_d.product_id = p_i.product_id
+),
+curr_exchange_v2_today AS ( -- filter in date of interest on `curr_exchange_v2_today`
+    SELECT  
+        country,      
+        rate_date,
+        ex_loc_to_eur
+    FROM ${ref("curr_exchange_v2")}
+    WHERE rate_date = ${dataform.projectConfig.vars.date_of_interest}
+)
+SELECT
+    s_d.country AS country, 
+    s_d.sales_date AS sales_date, 
+    o_i.outlet_id AS outlet_id,
+    o_i.outlet_name AS outlet_name,
+    o_i.region AS region,
+    s_d.sales_value AS sales_value,
+    (s_d.sales_value * c_e.ex_loc_to_eur) AS sales_value_eur
+FROM sales_daily_today_excluding s_d 
+LEFT JOIN ${ref("outlets_info")} o_i 
+    ON s_d.outlet_id = o_i.outlet_id
+LEFT JOIN curr_exchange_v2_today c_e 
+    ON s_d.country = c_e.country
+
+
